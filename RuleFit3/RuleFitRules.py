@@ -31,12 +31,12 @@ class Rule(object):
     
     def __init__(self, ruleNr):
         
-        self.ruleNr  = ruleNr
+        self.ruleNr  = int(ruleNr)
         self.rules   = None
         self.names   = list()
     
     def __repr__(self):
-        return "Rule %s: %s" %(self.ruleNr, ', '.join(self.names))
+        return "Rule %d: %s" %(self.ruleNr, ', '.join(self.names))
     
     def add(self, line):
         if line.strip() == "":
@@ -83,7 +83,7 @@ def readRuleFit3Rules(fname):
                     rules.append(rule)
                 except NameError:
                     pass
-                ruleNr = line[7]
+                ruleNr = line[5:8].strip()
                 rule = Rule(ruleNr)
             else:
                 rule.add(line)
@@ -163,7 +163,7 @@ if __name__ == "__main__":
     # Create the figure for each rule
     for ruleNr in sorted(list(set(df.Rule))):
         # Create the filename
-        fname = baseDir + "/rulePlot_rule%2.d.png" %(int(ruleNr)+1)
+        fname = baseDir + "/rulePlot_rule%2.d.png" %(ruleNr)
     
         # Select the rule
         df1 = df[ df.Rule == ruleNr ]
