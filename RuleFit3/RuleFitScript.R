@@ -116,7 +116,7 @@ analyse.model = function(test.data, test.class) {
   #               perf:  Performance object returned by performance() from ROCR
   
   # Initialise the Data Container Object
-  RuleFitData = setRefClass("RuleFit3 Model Analysis Container", fields = list( pred="prediction", eval="data.frame", perf="performance") )
+  RuleFitData = setRefClass("RuleFit3 Model Analysis Container", fields = list( pred="prediction", eval="data.frame", perf="performance", prediction="numeric") )
   result = RuleFitData$new()
   
   # Get the predictions of the test set
@@ -132,6 +132,7 @@ analyse.model = function(test.data, test.class) {
   eval$fpr = eval$fp/(eval$fp+eval$tn)
   
   # Set the result fields
+  result$prediction = yp
   result$eval = eval
   result$pred = pred
   result$perf = performance(pred, measure="tpr", x.measure="fpr")
