@@ -96,10 +96,8 @@ rf.multiclass = function(df, class.column, split.ratio=0.66, use.seed=123456) {
   # Data container for multi-classification.
   #
   # The input data will be split into test and training set, and further prepared
-  # for use in the multi-classification approach one-vs-all. I.e. that the original
-  # data will be divided with new class labels that allow the separation of one class
-  # vs the respective others.
-  # This data container can then be used to train and test models using multi-classification.
+  # for use in the multi-classification approach one-vs-all. This data container 
+  # can then be used to train and test models using multi-classification.
   #
   # Note: The classification matrix M will be automaticall generated as one.vs.all
   #       but can be overwriten if required. For each column one binary model will be
@@ -120,13 +118,23 @@ rf.multiclass = function(df, class.column, split.ratio=0.66, use.seed=123456) {
   # 
   # Returns:
   #   DataClass:  Classification Data Container. An object with the elements,
-  #                 "train.data",    the training data without class label
-  #                 "test.data",     test data without class label
-  #                 "train.class",   the (multi)class labels for the train dataset
-  #                 "test.class",    the (multi)class labels for the test dataset
-  #                 "M",             the one.vs.all matrix
-  #                 "class.labels",  a vector containing the unique class labels of the input data
-  #                 "models",        a list holding the trained models for each "sub-classification"
+  #
+  #                 "train.data":    the training data without class label
+  #
+  #                 "test.data":     test data without class label
+  #
+  #                 "train.class":   the (multi)class labels for the train dataset
+  #
+  #                 "test.class":    the (multi)class labels for the test dataset
+  #
+  #                 "M":             the one.vs.all matrix
+  #
+  #                 "class.labels":  a vector containing the unique class labels of 
+  #                                  the input data
+  #
+  #                 "models":        a list holding the trained models for each 
+  #                                  "sub-classification"
+  #
   
   # Initialise the Data Container Object
   MultiClassData = setRefClass("Multi-classification Data Container", 
