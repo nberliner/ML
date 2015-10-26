@@ -230,10 +230,18 @@ rf.set.classes = function(train.class, class.labels) {
 
 
 
-rf.build.model = function(data.object, ntree, mtry, nodesize, sampsize=NULL) {
+rf.build.model = function(data.object, ntree, mtry, nodesize, sampsize=NULL, multicore=TRUE) {
   #
   # Build the randomForest model for each one.vs.all binary class
   # definition in the multi-classification data.object.
+  #
+  # Note: On linux systems the models are build using multiple cores via
+  #       mclapply(). This will cause troubles in reading error messages
+  #       thrown by the model building routing. You can either debug or
+  #       set multicore=FALSE to fall back to lapply().
+  #
+  # Note further that multicore is only used on linux! It could work on OSX
+  # as well but I could not test it.
   #
   # Args:
   #   data.object:  A "Multi-classification Data Container" (see rf.multiclass)
@@ -252,60 +260,76 @@ rf.build.model = function(data.object, ntree, mtry, nodesize, sampsize=NULL) {
   #                 Note however that many data points of the more abundant class 
   #                 will be discarded for training.
   #
+  #   multicore:    Linux only! Use multiple cores for building the models.
+  #
   # Returns:
   #   The input data.object containing the randomForests in "models"
   #
   
   run.rf = function(i, data.object, ntree, mtry, nodesize, sampsize) {
-    
-    # Get the row index of the data to consider in the model
-    M            = data.object$M[,i]                                        # the current model that should be build
-    keep.classes = data.object$class.labels[ ifelse( M >= 0, TRUE, FALSE) ] # check if some classes should be ignored
-    idx          = data.object$train.class %in% keep.classes                # the indices of the rows to keep
-    
-    # Select the training data and class definitions
-    df.data  = data.object$train.data[ idx, ]
-    df.class = data.object$train.class[ idx, ]
-    
-    # Select the class that should be predicted as 1 and convert to binary
-    this.class = data.object$class.labels[ which(M == 1) ]
-    df.class[ df.class %in% this.class ] = 1 # consider the case that multiple classes are put together in one pot
-    df.class[ df.class != 1 ] = 0
-    
-    
-    ## Build the model
-    # Check if the classes should be sampled to avoid class imbalances
-    if ( !is.null(sampsize) && sampsize[i] ) {
-      # Set the sample size of each class to the occurence of the smaller class
-      if ( mean(as.numeric(df.class)) >= 0.5 ) {
-        nr = nrow(df.data) * (1-mean(as.numeric(df.class))) - 1
+    out = tryCatch( {
+      # Get the row index of the data to consider in the model
+      M            = data.object$M[,i]                                        # the current model that should be build
+      keep.classes = data.object$class.labels[ ifelse( M >= 0, TRUE, FALSE) ] # check if some classes should be ignored
+      idx          = data.object$train.class %in% keep.classes                # the indices of the rows to keep
+      
+      # Select the training data and class definitions
+      df.data  = data.object$train.data[ idx, ]
+      df.class = data.object$train.class[ idx, ]
+      
+      # Select the class that should be predicted as 1 and convert to binary
+      this.class = data.object$class.labels[ which(M == 1) ]
+      df.class[ df.class %in% this.class ] = 1 # consider the case that multiple classes are put together in one pot
+      df.class[ df.class != 1 ] = 0
+      
+      
+      ## Build the model
+      # Check if the classes should be sampled to avoid class imbalances
+      if ( !is.null(sampsize) && sampsize[i] ) {
+        # Set the sample size of each class to the occurence of the smaller class
+        if ( mean(as.numeric(df.class)) >= 0.5 ) {
+          nr = nrow(df.data) * (1-mean(as.numeric(df.class))) - 1
+        }
+        else {
+          nr = nrow(df.data) * mean(as.numeric(df.class)) -1
+        }
+        # Call randomForest with sampsize parameter
+        rf = randomForest(x=df.data, y=factor(df.class, c("1", "0"), labels=c("One", "Zero")), ntree=ntree, mtry=mtry, nodesize=nodesize, sampsize=c(nr,nr))
       }
       else {
-        nr = nrow(df.data) * mean(as.numeric(df.class)) -1
+        # Call randomForest without sampsize parameter
+        rf = randomForest(x=df.data, y=factor(df.class, c("1", "0"), labels=c("One", "Zero")), ntree=ntree, mtry=mtry, nodesize=nodesize)
       }
-      # Call randomForest with sampsize parameter
-      rf = randomForest(x=df.data, y=factor(df.class, c("1", "0"), labels=c("One", "Zero")), ntree=ntree, mtry=mtry, nodesize=nodesize, sampsize=c(nr,nr))
+      rf
+      
+      return( list(rf, i) )
+      }, error=function(cond) {
+        message("\nError building the model.\n")
+        message(cond)
+        message("\n\n")
+        return("stop")
+      } )
+    return(out)
+    }
+    
+    # Build each model
+    if ( Sys.info()['sysname'] == "Linux" & multicore ) {
+      result = mclapply(1:ncol(data.object$M), run.rf, data.object, ntree, mtry, nodesize, sampsize)
     }
     else {
-      # Call randomForest without sampsize parameter
-      rf = randomForest(x=df.data, y=factor(df.class, c("1", "0"), labels=c("One", "Zero")), ntree=ntree, mtry=mtry, nodesize=nodesize)
+      result = lapply(1:ncol(data.object$M), run.rf, data.object, ntree, mtry, nodesize, sampsize)
     }
-    rf
+    stopifnot( !("error" %in% result) )
     
-    return( list(rf, i) )
-  }
-  
-  # Build each model
-  result = mclapply(1:ncol(data.object$M), run.rf, data.object, ntree, mtry, nodesize, sampsize)
-  
-  # Add the models to the data object
-  data.object$models = result
-  
-  return(data.object)
+    # Add the models to the data object
+    data.object$models = result
+    
+    return(data.object)
+
 }
 
 
-rf.predict.multi = function(data.object, df.data=NULL, wt=NULL) {
+rf.predict.multi = function(data.object, df.data=NULL, wt=NULL, multicore=TRUE) {
   #
   # Predict multi-classification models.
   #
@@ -313,6 +337,8 @@ rf.predict.multi = function(data.object, df.data=NULL, wt=NULL) {
   # and the models itself in the data.object container, the class
   # of new data can be predicted. The class minimising the quadratic
   # error loss of all models simultaneously is selected as winning class.
+  #
+  # Note: Please refer to rf.build.model() for comments on using multiple cores.
   #
   # Args:
   #   data.object: A "Multi-classification Data Container" (see rf.multiclass)
@@ -325,6 +351,8 @@ rf.predict.multi = function(data.object, df.data=NULL, wt=NULL) {
   #                be specified in a vector of length equal to the number of
   #                columns in the model matrix M. The order must match the
   #                model matrix M.
+  #
+  #   multicore:   Linux only! Use multiple cores for building the models.
   #
   # Returns:
   #   A data.frame containing the multi-class labels
@@ -365,7 +393,12 @@ rf.predict.multi = function(data.object, df.data=NULL, wt=NULL) {
   models = data.object$models
   
   # Get the predictions of all models
-  predictions = mclapply(1:length(models), predict.mc, models, df.data)
+  if ( Sys.info()['sysname'] == "Linux" & multicore ) {
+    predictions = mclapply(1:length(models), predict.mc, models, df.data)
+  }
+  else{
+    predictions = lapply(1:length(models), predict.mc, models, df.data)
+  }
   predictions = data.frame(predictions)
   predictions = data.frame(1:nrow(predictions), predictions) # add an index column for cross joining
   colnames(predictions) = c("Index", lapply(1:length(models), indices), recursive=TRUE)
