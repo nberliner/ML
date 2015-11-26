@@ -68,18 +68,30 @@ prepare.data = function(df, class.column, cond, split.ratio=0.66, use.seed=12345
   df$class  = ifelse( cond(df[c(class.column.idx)]), 1, -1 )
   class.idx = grep("class", colnames(df))
   
-  # Get random indexes to split the data into test and training set
-  set.seed(use.seed)
-  train_idx = sample(c(1:nrow(df)), floor(split.ratio*nrow(df)))
-  test_idx  = c(1:nrow(df))[-train_idx]
-  
-  # Get the test and training set
-  result$train = df[train_idx, -c(class.column.idx, class.idx)]
-  result$test  = df[test_idx,  -c(class.column.idx, class.idx)]
-  
-  # Get the corresponding classes
-  result$train.class = df[train_idx, c(class.idx)]
-  result$test.class  = df[test_idx,  c(class.idx)]
+  # Do not split the data if the split.ratio does not allow it
+  if ( floor(split.ratio*nrow(df)) == nrow(df) ) { # don't split
+    # Get the test and training set
+    data.object$train.data = df[, -c(class.column.idx)]
+    data.object$test.data  = data.frame(c())
+    
+    # Add empty train data
+    data.object$train.class = matrix(df[, c(class.column.idx)])
+    data.object$test.class  = matrix(c(0))
+  }
+  else { # do split
+    # Get random indexes to split the data into test and training set
+    set.seed(use.seed)
+    train_idx = sample(c(1:nrow(df)), floor(split.ratio*nrow(df)))
+    test_idx  = c(1:nrow(df))[-train_idx]
+    
+    # Get the test and training set
+    data.object$train.data = df[train_idx, -c(class.column.idx)]
+    data.object$test.data  = df[test_idx,  -c(class.column.idx)]
+    
+    # Get the corresponding classes
+    data.object$train.class = matrix(df[train_idx, c(class.column.idx)])
+    data.object$test.class  = matrix(df[test_idx,  c(class.column.idx)])
+  }
   
   return(result)
 }
