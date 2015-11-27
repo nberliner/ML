@@ -52,27 +52,30 @@ prepare.data = function(df, class.column, cond, split.ratio=0.66, use.seed=12345
   #
   # Returns:
   #   result:  RuleFit3 Data Container Object with four fields.
-  #              train:       The training data.frame (without the class definition)
+  #              train.data:  The training data.frame (without the class definition)
   #              train.class: The class definition of the taining dataset
-  #              test:        The test data.frame (without the class definition)
+  #              test.data:   The test data.frame (without the class definition)
   #              test.class:  The class definition of the test dataset
   
   # Initialise the Data Container Object
-  RuleFitData = setRefClass("RuleFit3 Data Container", fields = list( train="data.frame", test="data.frame", train.class="matrix", test.class="matrix") )
-  result = RuleFitData$new()
+  RuleFitData = setRefClass("RuleFit3 Data Container", fields = list( train.data="data.frame", 
+                                                                      test.data="data.frame", 
+                                                                      train.class="matrix", 
+                                                                      test.class="matrix") )
+  data.object = RuleFitData$new()
   
   # Get the index of the class.column
   class.column.idx = grep(class.column, colnames(df))
   
   # Add the class based on the cutoff provided
-  df$class  = ifelse( cond(df[c(class.column.idx)]), 1, -1 )
-  class.idx = grep("class", colnames(df))
+  df[,c(class.column.idx)] = ifelse( cond(df[c(class.column.idx)]), 1, -1 )
   
   # Do not split the data if the split.ratio does not allow it
   if ( floor(split.ratio*nrow(df)) == nrow(df) ) { # don't split
     # Get the test and training set
-    data.object$train.data = df[, -c(class.column.idx)]
-    data.object$test.data  = data.frame(c())
+    data.object$train.data           = data.frame( df[, -c(class.column.idx)] )
+    colnames(data.object$train.data) = colnames(df)[-c(class.column.idx)]
+    data.object$test.data            = data.frame(c())
     
     # Add empty train data
     data.object$train.class = matrix(df[, c(class.column.idx)])
@@ -85,15 +88,17 @@ prepare.data = function(df, class.column, cond, split.ratio=0.66, use.seed=12345
     test_idx  = c(1:nrow(df))[-train_idx]
     
     # Get the test and training set
-    data.object$train.data = df[train_idx, -c(class.column.idx)]
-    data.object$test.data  = df[test_idx,  -c(class.column.idx)]
+    data.object$train.data           = data.frame(df[train_idx, -c(class.column.idx)])
+    colnames(data.object$train.data) = colnames(df)[-c(class.column.idx)]
+    data.object$test.data            = data.frame(df[test_idx,  -c(class.column.idx)])
+    colnames(data.object$test.data)  = colnames(df)[-c(class.column.idx)]
     
     # Get the corresponding classes
     data.object$train.class = matrix(df[train_idx, c(class.column.idx)])
     data.object$test.class  = matrix(df[test_idx,  c(class.column.idx)])
   }
   
-  return(result)
+  return(data.object)
 }
 
 
@@ -194,6 +199,7 @@ rulefit.rules = function(rulesout.hlp=paste(rfhome, "rulesout.hlp", sep="/")) {
   for ( i in 1:length(rules.string) ) {
     # Read the current line
     current.line = unlist( strsplit(rules.string[i], " ") )
+    current.line = current.line[ which( current.line != "" ) ] # remove empty fields
     
     # Check what to do with this line
     if ( current.line[1] == "Rule") { # a new rule
@@ -208,26 +214,25 @@ rulefit.rules = function(rulesout.hlp=paste(rfhome, "rulesout.hlp", sep="/")) {
       
       # Initialise a new rule container object
       newRule      = RuleFitRule()
-      newRule$name = as.numeric( strip(current.line[4]) )
+      newRule$name = as.numeric( strip(current.line[2]) )
       START        = TRUE # we start with a new rule
       
     }
     else if (START) { # first line after the new rule containing the support
-      tmp = current.line[ which( current.line != "" ) ] # remove empty fields
       
       # Do some sanity checks
-      stopifnot( tmp[1]      == 'support' )
-      stopifnot( tmp[2]      == '=' )
-      stopifnot( tmp[4]      == 'coeff' )
-      stopifnot( tmp[5]      == '=' )
-      stopifnot( tmp[7]      == 'importance' )
-      stopifnot( tmp[8]      == '=' )
-      stopifnot( length(tmp) == 9 )
+      stopifnot( current.line[1]      == 'support' )
+      stopifnot( current.line[2]      == '=' )
+      stopifnot( current.line[4]      == 'coeff' )
+      stopifnot( current.line[5]      == '=' )
+      stopifnot( current.line[7]      == 'importance' )
+      stopifnot( current.line[8]      == '=' )
+      stopifnot( length(current.line) == 9 )
       
       # Extract the support, coefficient, and support
-      newRule$support    = as.numeric(tmp[3])
-      newRule$coeff      = as.numeric(tmp[6])
-      newRule$importance = as.numeric(tmp[9])
+      newRule$support    = as.numeric(current.line[3])
+      newRule$coeff      = as.numeric(current.line[6])
+      newRule$importance = as.numeric(current.line[9])
       
       # Create an empty rules data.frame
       newRule$rules           = data.frame( c(0), c(0), c(0) )
@@ -235,16 +240,17 @@ rulefit.rules = function(rulesout.hlp=paste(rfhome, "rulesout.hlp", sep="/")) {
       
       START = FALSE # now we deal with the actual rules
     }
+    else if ( current.line[1] == "print_rules:" ) { # This can appear if no rule was found
+      next
+    }
     else { # the actual rule definitions
-      tmp = current.line[ which( current.line != "" ) ] # remove empty fields
-      
       # Some sanity checks
-      stopifnot( tmp[2]      == 'range' )
-      stopifnot( tmp[3]      == '=' )
-      stopifnot( length(tmp) == 5 )
+      stopifnot( current.line[2]      == 'range' )
+      stopifnot( current.line[3]      == '=' )
+      stopifnot( length(current.line) == 5 )
       
       # Put the rule into the data.frame
-      new.data           = data.frame( c(strip(tmp[1])), c(as.numeric(tmp[4])), c(as.numeric(tmp[5])) )
+      new.data           = data.frame( c(strip(current.line[1])), c(as.numeric(current.line[4])), c(as.numeric(current.line[5])) )
       colnames(new.data) = c("feature", "range_min", "range_max")
       newRule$rules      = rbind( newRule$rules, new.data )
     }
